@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# 仮想環境
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Pyxel が自動生成するスクリーンショット / GIF (Alt+1, Alt+9)
+pyxel-*.png
+pyxel-*.gif
+pyxel-*.mp4
+
+# Claude Code 関連（ローカル用ガイド、チーム共有しない）
+CLAUDE.md
+.claude/
