@@ -6,8 +6,10 @@ from .config import (
     PLAYER_ANIM_PERIOD,
     PLAYER_I_FRAME_DURATION,
     PLAYER_MAX_HP,
+    SHOOT_COOLDOWN,
 )
 from .input_handler import InputHandler
+from .projectile import Projectile
 from .sfx import SFX_ATTACK, SFX_HIT, play_sfx
 from .world import World
 
@@ -22,6 +24,8 @@ class Player:
         self.y = float(y)
         self.facing: str = "down"
         self.attack: Attack | None = None
+        self.projectile: Projectile | None = None
+        self._shoot_cd: int = 0
         self.i_frames: int = 0
         self.hp: int = PLAYER_MAX_HP
         self._is_moving: bool = False
@@ -47,6 +51,14 @@ class Player:
             if self.attack.is_expired():
                 self.attack = None
 
+        if self._shoot_cd > 0:
+            self._shoot_cd -= 1
+
+        if self.projectile is not None:
+            self.projectile.update(world)
+            if self.projectile.is_expired():
+                self.projectile = None
+
         prev_x, prev_y = self.x, self.y
         vx, vy = inp.move_vector()
         self._move_axis(world, vx * self.speed, 0.0)
@@ -65,6 +77,15 @@ class Player:
 
         if inp.is_pressed("attack") and self.attack is None:
             self.attack = Attack.spawn(self.x, self.y, self.w, self.h, self.facing)
+            play_sfx(SFX_ATTACK)
+
+        if (
+            inp.is_pressed("shoot")
+            and self.projectile is None
+            and self._shoot_cd <= 0
+        ):
+            self.projectile = Projectile.spawn(self.x, self.y, self.w, self.h, self.facing)
+            self._shoot_cd = SHOOT_COOLDOWN
             play_sfx(SFX_ATTACK)
 
     def _move_axis(self, world: World, dx: float, dy: float) -> None:
@@ -87,6 +108,8 @@ class Player:
         if self.i_frames > 0 and (self.i_frames // 3) % 2 == 0:
             if self.attack is not None:
                 self.attack.draw()
+            if self.projectile is not None:
+                self.projectile.draw()
             return
 
         frame = (pyxel.frame_count // PLAYER_ANIM_PERIOD) % 2 if self._is_moving else 0
@@ -103,3 +126,5 @@ class Player:
 
         if self.attack is not None:
             self.attack.draw()
+        if self.projectile is not None:
+            self.projectile.draw()

@@ -19,6 +19,18 @@ class Door:
 
 
 @dataclass(frozen=True)
+class SwitchGate:
+    switch: tuple[int, int]   # tile coords of the floor switch
+    door: tuple[int, int]     # tile coords of the locked door it opens
+
+
+@dataclass(frozen=True)
+class KeyGate:
+    key: tuple[int, int]      # tile coords of the key pickup
+    door: tuple[int, int]     # tile coords of the locked door it opens
+
+
+@dataclass(frozen=True)
 class Stage:
     index: int
     width: int
@@ -27,6 +39,13 @@ class Stage:
     default_spawn: tuple[int, int]
     enemy_spawns: tuple[tuple[int, int], ...]
     doors: tuple[Door, ...]
+    dash_spawns: tuple[tuple[int, int], ...] = ()
+    tank_spawns: tuple[tuple[int, int], ...] = ()
+    ranged_spawns: tuple[tuple[int, int], ...] = ()
+    boss_spawn: tuple[int, int] | None = None
+    switch_gates: tuple[SwitchGate, ...] = ()
+    key_gates: tuple[KeyGate, ...] = ()
+    chapter_title: str = ""
 
     def door_overlapping(self, x: float, y: float, w: int, h: int) -> Door | None:
         for door in self.doors:
@@ -80,19 +99,100 @@ def _generate(
     return raw, tuple(spawns)
 
 
+def _patch(raw: tuple[str, ...], patches: tuple[tuple[int, int, str], ...]) -> tuple[str, ...]:
+    """Overlay individual tile characters onto a raw map."""
+    rows = [list(r) for r in raw]
+    for x, y, c in patches:
+        rows[y][x] = c
+    return tuple("".join(r) for r in rows)
+
+
+def _boss_room() -> tuple[tuple[str, ...], tuple[int, int], tuple[int, int]]:
+    """Hand-built closed square room for the final boss.
+
+    Returns (raw_map, entrance_door_tile, boss_center_tile).
+    """
+    rows = [["1"] * STAGE_W for _ in range(STAGE_H)]
+    room_w, room_h = 16, 12
+    rx0 = (STAGE_W - room_w) // 2
+    rx1 = rx0 + room_w
+    ry0 = (STAGE_H - room_h) // 2
+    ry1 = ry0 + room_h
+    for y in range(ry0, ry1):
+        for x in range(rx0, rx1):
+            rows[y][x] = "0"
+    # West entrance corridor: 2 floor tiles + 1 door
+    door_y = (ry0 + ry1) // 2
+    rows[door_y][rx0 - 1] = "0"
+    rows[door_y][rx0 - 2] = "D"
+    boss_center = (rx0 + room_w // 2, ry0 + room_h // 2)
+    raw = tuple("".join(r) for r in rows)
+    return raw, (rx0 - 2, door_y), boss_center
+
+
 _MID_Y = STAGE_H // 2
 
-# Stage 0 → east door leads to stage 1; stage 0 spawn is (2, 2).
-# Stage 1 → west door leads back; stage 1 spawn is at center.
+# --- Stage 0: THE ENTRANCE ---------------------------------------------------
 _S0_DOORS = ((STAGE_W - 1, _MID_Y),)
-_S1_DOORS = ((0, _MID_Y),)
-
-# Keep spawn and door-approach tiles open so neither is blocked by interior clumps.
 _S0_SAFE = ((2, 2), (STAGE_W - 2, _MID_Y), (STAGE_W - 3, _MID_Y))
-_S1_SAFE = ((STAGE_W // 2, _MID_Y), (1, _MID_Y), (2, _MID_Y))
-
 _S0_MAP, _S0_ENEMIES = _generate(seed=1, doors=_S0_DOORS, safe_tiles=_S0_SAFE)
-_S1_MAP, _S1_ENEMIES = _generate(seed=2, doors=_S1_DOORS, safe_tiles=_S1_SAFE)
+
+# --- Stage 1: THE MOSS HALL (switch gate + dash slimes) ----------------------
+# Switch in the open mid-area, locked door blocks the run-up to the east exit.
+_S1_SWITCH = (STAGE_W // 2, _MID_Y - 3)
+_S1_LOCKED = (STAGE_W - 3, _MID_Y)
+_S1_DOORS_TILES = ((STAGE_W - 1, _MID_Y),)
+_S1_SAFE = (
+    (1, _MID_Y), (2, _MID_Y),
+    _S1_SWITCH,
+    _S1_LOCKED, (STAGE_W - 4, _MID_Y), (STAGE_W - 2, _MID_Y),
+)
+_S1_MAP_RAW, _S1_ENEMIES_ALL = _generate(seed=2, doors=_S1_DOORS_TILES, safe_tiles=_S1_SAFE)
+_S1_MAP = _patch(
+    _S1_MAP_RAW,
+    (
+        (_S1_SWITCH[0], _S1_SWITCH[1], "S"),
+        (_S1_LOCKED[0], _S1_LOCKED[1], "L"),
+    ),
+)
+# Half normal slimes, half dash slimes for early variety.
+_S1_NORMAL = _S1_ENEMIES_ALL[: len(_S1_ENEMIES_ALL) // 2]
+_S1_DASH = _S1_ENEMIES_ALL[len(_S1_ENEMIES_ALL) // 2 :]
+
+# --- Stage 2: THE DRIPPING CORRIDOR (all dash slimes) ------------------------
+_S2_DOORS_TILES = ((STAGE_W - 1, _MID_Y),)
+_S2_SAFE = ((1, _MID_Y), (2, _MID_Y), (STAGE_W - 2, _MID_Y), (STAGE_W - 3, _MID_Y))
+_S2_MAP, _S2_ENEMIES_ALL = _generate(seed=3, doors=_S2_DOORS_TILES, safe_tiles=_S2_SAFE)
+# Mid-stage shake-up: keep most as dash, convert two to ranged shooters.
+_S2_DASH = _S2_ENEMIES_ALL[:4]
+_S2_RANGED = _S2_ENEMIES_ALL[4:]
+
+# --- Stage 3: THE SPRING GATE (tank + key gate) ------------------------------
+# Key sits exposed near west, locked door blocks east stage exit.
+_S3_KEY = (STAGE_W // 3, _MID_Y)
+_S3_LOCKED = (STAGE_W - 3, _MID_Y)
+_S3_TANK_TILE = (STAGE_W * 2 // 3, _MID_Y)
+_S3_DOORS_TILES = ((STAGE_W - 1, _MID_Y),)
+_S3_SAFE = (
+    (1, _MID_Y), (2, _MID_Y),
+    _S3_KEY,
+    _S3_TANK_TILE,
+    _S3_LOCKED, (STAGE_W - 4, _MID_Y), (STAGE_W - 2, _MID_Y),
+)
+_S3_MAP_RAW, _S3_ENEMIES_ALL = _generate(seed=4, doors=_S3_DOORS_TILES, safe_tiles=_S3_SAFE)
+_S3_MAP = _patch(
+    _S3_MAP_RAW,
+    (
+        (_S3_KEY[0], _S3_KEY[1], "K"),
+        (_S3_LOCKED[0], _S3_LOCKED[1], "L"),
+    ),
+)
+# Keep 4 plain slimes; pin the tank at the chosen tile.
+_S3_NORMAL = _S3_ENEMIES_ALL[:4]
+_S3_TANK = ((_S3_TANK_TILE[0] * TILE_SIZE, _S3_TANK_TILE[1] * TILE_SIZE),)
+
+# --- Stage 4: THE CORE (boss room) -------------------------------------------
+_S4_MAP, _S4_ENTRANCE, _S4_BOSS_TILE = _boss_room()
 
 
 STAGES: tuple[Stage, ...] = (
@@ -111,21 +211,81 @@ STAGES: tuple[Stage, ...] = (
                 target_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
             ),
         ),
+        chapter_title="I. THE ENTRANCE",
     ),
     Stage(
         index=1,
         width=STAGE_W,
         height=STAGE_H,
         raw_map=_S1_MAP,
-        default_spawn=((STAGE_W // 2) * TILE_SIZE, _MID_Y * TILE_SIZE),
-        enemy_spawns=_S1_ENEMIES,
+        default_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
+        enemy_spawns=_S1_NORMAL,
+        dash_spawns=_S1_DASH,
         doors=(
             Door(
-                tx=0,
+                tx=STAGE_W - 1,
                 ty=_MID_Y,
-                target_stage=0,
+                target_stage=2,
+                target_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
+            ),
+        ),
+        switch_gates=(SwitchGate(switch=_S1_SWITCH, door=_S1_LOCKED),),
+        chapter_title="II. THE MOSS HALL",
+    ),
+    Stage(
+        index=2,
+        width=STAGE_W,
+        height=STAGE_H,
+        raw_map=_S2_MAP,
+        default_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
+        enemy_spawns=(),
+        dash_spawns=_S2_DASH,
+        ranged_spawns=_S2_RANGED,
+        doors=(
+            Door(
+                tx=STAGE_W - 1,
+                ty=_MID_Y,
+                target_stage=3,
+                target_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
+            ),
+        ),
+        chapter_title="III. THE DRIPPING CORRIDOR",
+    ),
+    Stage(
+        index=3,
+        width=STAGE_W,
+        height=STAGE_H,
+        raw_map=_S3_MAP,
+        default_spawn=(1 * TILE_SIZE, _MID_Y * TILE_SIZE),
+        enemy_spawns=_S3_NORMAL,
+        tank_spawns=_S3_TANK,
+        doors=(
+            Door(
+                tx=STAGE_W - 1,
+                ty=_MID_Y,
+                target_stage=4,
+                target_spawn=((_S4_ENTRANCE[0] + 1) * TILE_SIZE, _S4_ENTRANCE[1] * TILE_SIZE),
+            ),
+        ),
+        key_gates=(KeyGate(key=_S3_KEY, door=_S3_LOCKED),),
+        chapter_title="IV. THE SPRING GATE",
+    ),
+    Stage(
+        index=4,
+        width=STAGE_W,
+        height=STAGE_H,
+        raw_map=_S4_MAP,
+        default_spawn=((_S4_ENTRANCE[0] + 1) * TILE_SIZE, _S4_ENTRANCE[1] * TILE_SIZE),
+        enemy_spawns=(),
+        boss_spawn=(_S4_BOSS_TILE[0] * TILE_SIZE, _S4_BOSS_TILE[1] * TILE_SIZE),
+        doors=(
+            Door(
+                tx=_S4_ENTRANCE[0],
+                ty=_S4_ENTRANCE[1],
+                target_stage=3,
                 target_spawn=((STAGE_W - 2) * TILE_SIZE, _MID_Y * TILE_SIZE),
             ),
         ),
+        chapter_title="V. THE CORE",
     ),
 )

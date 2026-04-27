@@ -8,6 +8,7 @@ from ..input_handler import InputHandler
 from ..particle import Particle
 from ..scene import Scene
 from ..sfx import SFX_CONFIRM, play_sfx, stop_bgm
+from ..stage import STAGES
 
 
 class TitleScene(Scene):
@@ -39,7 +40,10 @@ class TitleScene(Scene):
         if inp.is_pressed("confirm"):
             play_sfx(SFX_CONFIRM)
             from .play_scene import PlayScene
-            self._manager.replace(PlayScene())
+            from .story_scene import StoryScene
+            self._manager.replace(
+                StoryScene(STAGES[0].chapter_title, lambda: PlayScene())
+            )
 
     def draw(self) -> None:
         pyxel.camera()
@@ -50,8 +54,11 @@ class TitleScene(Scene):
 
         wave = int(math.sin(pyxel.frame_count * 0.08) * 2)
         title = "PIXEL ACTION"
-        pyxel.text((SCREEN_W - len(title) * 4) // 2, SCREEN_H // 2 - 12 + wave, title, COL_TEXT)
+        pyxel.text((SCREEN_W - len(title) * 4) // 2, SCREEN_H // 2 - 16 + wave, title, COL_TEXT)
+
+        subtitle = "THE SUNKEN SHRINE"
+        pyxel.text((SCREEN_W - len(subtitle) * 4) // 2, SCREEN_H // 2 - 4, subtitle, COL_TEXT_DIM)
 
         tip = "PRESS SPACE"
         if (pyxel.frame_count // 20) % 2 == 0:
-            pyxel.text((SCREEN_W - len(tip) * 4) // 2, SCREEN_H // 2 + 10, tip, COL_TEXT_DIM)
+            pyxel.text((SCREEN_W - len(tip) * 4) // 2, SCREEN_H // 2 + 14, tip, COL_TEXT_DIM)

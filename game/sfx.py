@@ -9,14 +9,16 @@ SFX_KILL = 2
 SFX_CONFIRM = 3
 
 BGM_PLAY = 0
+BGM_BOSS = 1
+BGM_ENDING = 2
 
 
 def play_sfx(sound_id: int) -> None:
     pyxel.play(SFX_CH, sound_id)
 
 
-def start_bgm() -> None:
-    pyxel.playm(BGM_PLAY, loop=True)
+def start_bgm(music_id: int = BGM_PLAY) -> None:
+    pyxel.playm(music_id, loop=True)
 
 
 def stop_bgm() -> None:
