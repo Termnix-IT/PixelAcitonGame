@@ -232,7 +232,11 @@ class TankSlime(Slime):
     def draw(self) -> None:
         frame = (pyxel.frame_count // SLIME_ANIM_PERIOD) % 2
         u, v = TANK_SPRITES[frame]
-        pyxel.blt(int(self.x), int(self.y), 0, u, v, TANK_SPRITE_W, TANK_SPRITE_H, COLKEY)
+        # 12x12 sprite centered on the 8x8 AABB so the silhouette overhangs the
+        # tighter collision box.
+        ox = (TANK_SPRITE_W - self.w) // 2
+        oy = (TANK_SPRITE_H - self.h) // 2
+        pyxel.blt(int(self.x) - ox, int(self.y) - oy, 0, u, v, TANK_SPRITE_W, TANK_SPRITE_H, COLKEY)
 
 
 class RangedSlime(Slime):

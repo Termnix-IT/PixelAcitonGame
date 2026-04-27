@@ -11,14 +11,18 @@ from ..assets import (
 from ..boss import Boss
 from ..camera import Camera
 from ..config import (
+    BOSS_HP,
     BOSS_KILL_BURST_COUNT,
     BOSS_KILL_SHAKE_FRAMES,
+    BOSS_PHASE_A_MIN_HP,
+    BOSS_PHASE_B_MIN_HP,
     COL_BG,
     COL_HP,
     COL_HP_EMPTY,
     COL_TEXT,
     COL_TEXT_DIM,
     ENEMY_KILL_SHAKE_FRAMES,
+    LEVEL_COOLDOWNS,
     LEVEL_DAMAGES,
     LEVEL_THRESHOLDS,
     LEVEL_UP_DISPLAY_FRAMES,
@@ -95,6 +99,7 @@ class PlayScene(Scene):
         self._particles: list[Particle] = []
         self._score = score
         self._level = _level_for_score(score)
+        self._player.shoot_cooldown_max = LEVEL_COOLDOWNS[self._level - 1]
         self._level_up_timer = 0
         self._shake_frames: int = 0
         self._camera = Camera()
@@ -134,7 +139,6 @@ class PlayScene(Scene):
         self._resolve_enemy_projectile_hits()
         self._enemy_projectiles = [p for p in self._enemy_projectiles if not p.is_expired()]
 
-        self._resolve_attack_hits()
         self._resolve_projectile_hits()
         self._resolve_enemy_contact()
         self._resolve_gimmicks()
@@ -191,30 +195,20 @@ class PlayScene(Scene):
             self._stage.height,
         )
 
-    def _resolve_attack_hits(self) -> None:
-        attack = self._player.attack
-        if attack is None:
-            return
-        for enemy in self._enemies:
-            if not enemy.alive:
-                continue
-            if attack.rect_overlaps(enemy.x, enemy.y, enemy.w, enemy.h):
-                self._apply_hit(enemy)
-                self._player.attack = None
-                break
-
     def _resolve_projectile_hits(self) -> None:
-        projectile = self._player.projectile
-        if projectile is None:
+        if not self._player.projectiles:
             return
         damage = LEVEL_DAMAGES[self._level - 1]
-        for enemy in self._enemies:
-            if not enemy.alive:
+        for proj in self._player.projectiles:
+            if proj.is_expired():
                 continue
-            if projectile.rect_overlaps(enemy.x, enemy.y, enemy.w, enemy.h):
-                self._apply_hit(enemy, damage=damage)
-                self._player.projectile = None
-                break
+            for enemy in self._enemies:
+                if not enemy.alive:
+                    continue
+                if proj.rect_overlaps(enemy.x, enemy.y, enemy.w, enemy.h):
+                    self._apply_hit(enemy, damage=damage)
+                    proj.expire()
+                    break
 
     def _resolve_enemy_projectile_hits(self) -> None:
         p = self._player
@@ -258,6 +252,7 @@ class PlayScene(Scene):
         new_level = _level_for_score(self._score)
         if new_level > self._level:
             self._level = new_level
+            self._player.shoot_cooldown_max = LEVEL_COOLDOWNS[self._level - 1]
             self._level_up_timer = LEVEL_UP_DISPLAY_FRAMES
             play_sfx(SFX_CONFIRM)
 
@@ -340,6 +335,33 @@ class PlayScene(Scene):
         if self._has_key:
             # Lit key icon to the left of the HP row.
             pyxel.blt(SCREEN_W - 4 - PLAYER_MAX_HP * 5 - 10, 1, 0, KEY_HUD_U, 0, 8, 8, COLKEY)
+        self._draw_boss_hp_bar()
         if self._level_up_timer > 0 and (self._level_up_timer // 4) % 2 == 0:
             banner = "LEVEL UP!"
             pyxel.text((SCREEN_W - len(banner) * 4) // 2, SCREEN_H // 2 - 4, banner, COL_TEXT)
+
+    def _draw_boss_hp_bar(self) -> None:
+        if self._boss is None or not self._boss.alive:
+            return
+
+        bar_w = 120
+        bar_h = 6
+        bar_x = (SCREEN_W - bar_w) // 2
+        bar_y = 22
+        label = "THE CORE"
+        pyxel.text((SCREEN_W - len(label) * 4) // 2, bar_y - 8, label, COL_TEXT)
+
+        # Outer frame in dim gray, inner background in deep navy.
+        pyxel.rectb(bar_x - 1, bar_y - 1, bar_w + 2, bar_h + 2, 5)
+        pyxel.rect(bar_x, bar_y, bar_w, bar_h, 1)
+
+        if self._boss.hp >= BOSS_PHASE_A_MIN_HP:
+            fill_color = 10   # gold — Phase A
+        elif self._boss.hp >= BOSS_PHASE_B_MIN_HP:
+            fill_color = 9    # orange — Phase B
+        else:
+            fill_color = 8    # red — Phase C
+
+        fill_w = int(bar_w * self._boss.hp / BOSS_HP)
+        if fill_w > 0:
+            pyxel.rect(bar_x, bar_y, fill_w, bar_h, fill_color)

@@ -1,7 +1,6 @@
 import pyxel
 
 from .assets import COLKEY, PLAYER_SPRITES, SPRITE_H, SPRITE_W
-from .attack import Attack
 from .config import (
     PLAYER_ANIM_PERIOD,
     PLAYER_I_FRAME_DURATION,
@@ -23,8 +22,8 @@ class Player:
         self.x = float(x)
         self.y = float(y)
         self.facing: str = "down"
-        self.attack: Attack | None = None
-        self.projectile: Projectile | None = None
+        self.projectiles: list[Projectile] = []
+        self.shoot_cooldown_max: int = SHOOT_COOLDOWN  # PlayScene overrides this per level.
         self._shoot_cd: int = 0
         self.i_frames: int = 0
         self.hp: int = PLAYER_MAX_HP
@@ -46,18 +45,12 @@ class Player:
         if self.i_frames > 0:
             self.i_frames -= 1
 
-        if self.attack is not None:
-            self.attack.update()
-            if self.attack.is_expired():
-                self.attack = None
-
         if self._shoot_cd > 0:
             self._shoot_cd -= 1
 
-        if self.projectile is not None:
-            self.projectile.update(world)
-            if self.projectile.is_expired():
-                self.projectile = None
+        for p in self.projectiles:
+            p.update(world)
+        self.projectiles = [p for p in self.projectiles if not p.is_expired()]
 
         prev_x, prev_y = self.x, self.y
         vx, vy = inp.move_vector()
@@ -75,17 +68,11 @@ class Player:
         elif inp.is_pressed("move_right"):
             self.facing = "right"
 
-        if inp.is_pressed("attack") and self.attack is None:
-            self.attack = Attack.spawn(self.x, self.y, self.w, self.h, self.facing)
-            play_sfx(SFX_ATTACK)
-
-        if (
-            inp.is_pressed("shoot")
-            and self.projectile is None
-            and self._shoot_cd <= 0
-        ):
-            self.projectile = Projectile.spawn(self.x, self.y, self.w, self.h, self.facing)
-            self._shoot_cd = SHOOT_COOLDOWN
+        if inp.is_pressed("shoot") and self._shoot_cd <= 0:
+            self.projectiles.append(
+                Projectile.spawn(self.x, self.y, self.w, self.h, self.facing)
+            )
+            self._shoot_cd = self.shoot_cooldown_max
             play_sfx(SFX_ATTACK)
 
     def _move_axis(self, world: World, dx: float, dy: float) -> None:
@@ -106,10 +93,8 @@ class Player:
     def draw(self) -> None:
         # Blink every few frames while invulnerable so hits read clearly.
         if self.i_frames > 0 and (self.i_frames // 3) % 2 == 0:
-            if self.attack is not None:
-                self.attack.draw()
-            if self.projectile is not None:
-                self.projectile.draw()
+            for p in self.projectiles:
+                p.draw()
             return
 
         frame = (pyxel.frame_count // PLAYER_ANIM_PERIOD) % 2 if self._is_moving else 0
@@ -124,7 +109,5 @@ class Player:
         # 8x8 sprite centered on the 6x6 AABB.
         pyxel.blt(int(self.x) - 1, int(self.y) - 1, 0, u, v, blt_w, SPRITE_H, COLKEY)
 
-        if self.attack is not None:
-            self.attack.draw()
-        if self.projectile is not None:
-            self.projectile.draw()
+        for p in self.projectiles:
+            p.draw()

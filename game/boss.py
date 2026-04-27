@@ -12,10 +12,12 @@ from .config import (
     BOSS_FIRE_INTERVAL,
     BOSS_HP,
     BOSS_H,
+    BOSS_PHASE_A_MIN_HP,
     BOSS_PHASE_B_BURST_COUNT,
     BOSS_PHASE_B_DASH_INTERVAL,
     BOSS_PHASE_B_DASH_SPEED,
     BOSS_PHASE_B_DASH_TIMEOUT,
+    BOSS_PHASE_B_MIN_HP,
     BOSS_PHASE_C_RING_COUNT,
     BOSS_PHASE_C_RING_INTERVAL,
     BOSS_SPEED,
@@ -34,12 +36,12 @@ if TYPE_CHECKING:
 
 
 class Boss(Enemy):
-    """Three-phase boss. HP gates the behavior:
+    """Three-phase boss. HP gates the behavior (thresholds in config):
 
-    - HP 9–12 (Phase A): drifts toward the player, fan-shoots every BOSS_FIRE_INTERVAL.
-    - HP 5–8  (Phase B): periodically dashes at the player; on wall impact, detonates
+    - Phase A: drifts toward the player, fan-shoots every BOSS_FIRE_INTERVAL.
+    - Phase B: periodically dashes at the player; on wall impact, detonates
       into a 4-way burst.
-    - HP 1–4  (Phase C): stops moving and emits a 360° ring shot every interval.
+    - Phase C: stops moving and emits a 360° ring shot every interval.
     """
 
     def __init__(self, x: float, y: float) -> None:
@@ -54,9 +56,9 @@ class Boss(Enemy):
         self._pending: list[Projectile] = []
 
     def update(self, world: World, player: "Player") -> None:
-        if self.hp >= 9:
+        if self.hp >= BOSS_PHASE_A_MIN_HP:
             self._phase_a(world, player)
-        elif self.hp >= 5:
+        elif self.hp >= BOSS_PHASE_B_MIN_HP:
             self._phase_b(world, player)
         else:
             self._phase_c(player)

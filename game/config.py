@@ -10,7 +10,7 @@ STAGE_W = 48
 STAGE_H = 32
 
 COL_BG = 0
-COL_ATTACK = 10
+COL_ATTACK = 10               # reused as the projectile color
 COL_ENEMY = 8
 COL_HP = 8
 COL_HP_EMPTY = 13
@@ -23,15 +23,14 @@ COL_KEY_ICON = 10             # HUD key indicator color
 PLAYER_ANIM_PERIOD = 8        # frames per walk-cycle pattern
 PLAYER_MAX_HP = 3
 PLAYER_I_FRAME_DURATION = 48  # frames of invulnerability after taking a hit
-ATTACK_DURATION = 6           # frames the hitbox stays visible/active
-ATTACK_REACH = 6              # pixels the hitbox extends in the facing direction
 
-# Ranged attack tuning
-PROJECTILE_W = 2
-PROJECTILE_H = 2
-PROJECTILE_SPEED = 2.0        # pixels per frame, faster than the player to feel sharp
-PROJECTILE_MAX_LIFE = 60      # frames before auto-expiry (safety net)
-SHOOT_COOLDOWN = 24           # frames the player must wait between shots
+# Ranged attack tuning. Cooldown defaults to LEVEL_COOLDOWNS[0]; the level system
+# overrides it on level changes (see PlayScene._check_level_up).
+PROJECTILE_W = 3
+PROJECTILE_H = 3
+PROJECTILE_SPEED = 1.5        # slow enough that the AABB sweeps cleanly each frame
+PROJECTILE_MAX_LIFE = 120     # ~180 px of travel — long enough to cross the screen
+SHOOT_COOLDOWN = 16           # base/default; level table is the source of truth
 
 # Enemy tuning
 ENEMY_WANDER_SPEED = 0.35
@@ -47,14 +46,18 @@ DASH_INTERVAL = 90            # frames between dashes
 DASH_DURATION = 20            # frames spent in dash
 DASH_SPEED_MUL = 2.5
 
-# TankSlime — fat, slow, drops a key when killed (used in stage 4)
-TANK_SLIME_HP = 5
+# TankSlime — fat, slow, drops a key when killed (used in stage 4).
+# AABB is intentionally smaller than the 12x12 sprite so the tank can squeeze
+# through the 1–2 tile corridors that _generate carves out.
+TANK_SLIME_HP = 10
 TANK_SLIME_SPEED_MUL = 0.5
-TANK_SLIME_W = 12
-TANK_SLIME_H = 12
+TANK_SLIME_W = 8
+TANK_SLIME_H = 8
 
 # Boss "THE CORE" — final-room enemy
-BOSS_HP = 12
+BOSS_HP = 24
+BOSS_PHASE_A_MIN_HP = 17   # HP at or above → Phase A (drift + fan)
+BOSS_PHASE_B_MIN_HP = 9    # HP at or above (and below A) → Phase B (dash + burst)
 BOSS_W = 12
 BOSS_H = 12
 BOSS_SPEED = 0.4              # gentle oscillation in the boss room
@@ -76,10 +79,11 @@ BOSS_PHASE_C_RING_COUNT = 12   # bullets per ring (every 30°)
 RANGED_SLIME_HP = 1
 RANGED_FIRE_INTERVAL = 90
 
-# Player level system — driven by score, lifts ranged damage
-LEVEL_THRESHOLDS = (0, 500, 1500)    # score thresholds: Lv1, Lv2, Lv3
-LEVEL_DAMAGES = (1, 2, 3)            # ranged damage per level
-LEVEL_UP_DISPLAY_FRAMES = 60         # frames the "LEVEL UP!" banner stays up
+# Player level system — driven by score, lifts ranged damage and fire rate
+LEVEL_THRESHOLDS = (0, 500, 1500, 3000)   # score thresholds: Lv1, Lv2, Lv3, Lv4
+LEVEL_DAMAGES = (1, 2, 3, 4)              # ranged damage per level
+LEVEL_COOLDOWNS = (16, 13, 10, 8)         # shoot cooldown frames per level
+LEVEL_UP_DISPLAY_FRAMES = 60              # frames the "LEVEL UP!" banner stays up
 
 KEYBINDS: dict[str, list[int]] = {
     "move_up":    [pyxel.KEY_UP, pyxel.KEY_W],
@@ -88,6 +92,5 @@ KEYBINDS: dict[str, list[int]] = {
     "move_right": [pyxel.KEY_RIGHT, pyxel.KEY_D],
     "confirm":    [pyxel.KEY_SPACE, pyxel.KEY_RETURN],
     "back":       [pyxel.KEY_ESCAPE],
-    "attack":     [pyxel.KEY_Z],
-    "shoot":      [pyxel.KEY_X],
+    "shoot":      [pyxel.KEY_X, pyxel.KEY_Z],
 }
